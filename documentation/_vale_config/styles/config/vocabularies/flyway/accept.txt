@@ -113,7 +113,7 @@ schema_shadow
 
 load_project
 reload_project
-create_before_pull_snapshot
+create_schema_model_checkpoint
 create_diff_schema_model
 update_schema_model
 create_diff_migrations

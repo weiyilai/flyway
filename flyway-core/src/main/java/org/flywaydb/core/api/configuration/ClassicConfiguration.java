@@ -2021,6 +2021,17 @@ public class ClassicConfiguration implements Configuration {
                 .findFirst()
                 .orElse(null);
             if (cfg != null) {
+
+                if (!ConfigurationExtension.JACKSON_DATABIND_PRESENT) {
+                    final String keys = String.join(", ", property.getValue().keySet());
+                    throw new FlywayException(
+                        "Configuring '" + keys + "' via this API requires 'jackson-databind' on the classpath. "
+                            + "Add it as a dependency, or set it through getConfigurationExtension("
+                            + cfg.getClass().getSimpleName()
+                            + ".class) instead.",
+                        CoreErrorCode.CONFIGURATION);
+                }
+
                 final Map<String, Object> mpTmp = property.getValue();
 
                 try {

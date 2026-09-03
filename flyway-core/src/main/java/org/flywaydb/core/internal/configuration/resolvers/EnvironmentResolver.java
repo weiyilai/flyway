@@ -33,7 +33,6 @@ public class EnvironmentResolver {
 
     private final Map<String, PropertyResolver> propertyResolvers;
     private final Map<String, ? extends EnvironmentProvisioner> environmentProvisioners;
-    private final EnvironmentResolverConfigurationMapCreator configurationMapCreator = new EnvironmentResolverConfigurationMapCreator();
 
     public EnvironmentResolver(final Map<String, PropertyResolver> propertyResolvers,
         final Map<String, ? extends EnvironmentProvisioner> environmentProvisioners) {
@@ -53,8 +52,19 @@ public class EnvironmentResolver {
         final ProvisionerMode mode,
         final Configuration configuration,
         final ProgressLogger progress) {
-        final Map<String, ConfigurationExtension> resolverConfigs = configurationMapCreator.createMap(environment,
-            configuration.getPluginRegister());
+        final Map<String, ConfigurationExtension> resolverConfigs;
+        if (environment.getResolvers() != null && !environment.getResolvers().isEmpty()) {
+            if (!ConfigurationExtension.JACKSON_DATABIND_PRESENT) {
+                throw new FlywayException(
+                    "Reading resolver configuration requires 'jackson-databind' on the classpath. Add it as a dependency to use this feature.",
+                    CoreErrorCode.CONFIGURATION);
+            }
+            resolverConfigs = new EnvironmentResolverConfigurationMapCreator().createMap(environment,
+                configuration.getPluginRegister());
+        } else {
+            resolverConfigs = null;
+        }
+
         final PropertyResolverContext context = new PropertyResolverContextImpl(environmentName,
             configuration,
             propertyResolvers,

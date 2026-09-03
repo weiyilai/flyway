@@ -9,6 +9,42 @@
 <div class="col-md-9">
 <!-- BEGIN db-generated release notes -->
   <div class="release">
+        <h2 id="13.5.0">Flyway 13.5.0 (2026-09-03)</h2>
+
+        <h3>New features</h3>
+        <ul>
+            <li>Flyway debug logs now show the final configuration parameters along with where each value originated</li>
+        </ul>
+
+        <h3>Changes</h3>
+        <ul>
+            <li>Improve dry run script's reviewability by removing unnecessary statements</li>
+            <li>the Flyway MCP Server tool "create_before_pull_snapshot" has been renamed to "create_schema_model_checkpoint"</li>
+        </ul>
+
+        <h3>Java compatibility</h3>
+        <ul>
+            <li>`jackson-databind` is now an optional dependency of `flyway-core`. If your application or integration relies `jackson-databind`, you should explicitly declare it as a dependency in your project rather than relying on `flyway-core` to provide it transitively</li>
+            <li>`JSON` support is no longer bundled with `flyway-core` and is now provided through the new `flyway-core-utilities` module</li>
+        </ul>
+
+        <h3>Library upgrades</h3>
+        <ul>
+            <li>Upgraded com.fasterxml.jackson.core:jackson-annotations from 2.21 to 2.22</li>
+            <li>Upgraded com.fasterxml.jackson.core:jackson-core from 2.22.1 to 2.22.2</li>
+            <li>Upgraded com.fasterxml.jackson.core:jackson-databind from 2.22.1 to 2.22.2</li>
+            <li>Upgraded org.mariadb.jdbc:mariadb-java-client from 2.7.13 to 2.7.14</li>
+        </ul>
+
+        <h3>Internal dependency</h3>
+        <ul>
+            <li>Upgraded RgCompare to 1.62.7.5532</li>
+        </ul>
+
+  </div>
+
+
+  <div class="release">
         <h2 id="13.4.0">Flyway 13.4.0 (2026-08-26)</h2>
 
         <h3>New features</h3>
@@ -38,11 +74,6 @@
         <h3>Java compatibility</h3>
         <ul>
             <li>`TOML` support is no longer bundled with `flyway-core` and is now provided through the new `flyway-core-utilities` module</li>
-        </ul>
-
-        <h3>Internal dependency</h3>
-        <ul>
-            <li>Upgraded RgCompare to 1.62.7.5446</li>
         </ul>
 
   </div>

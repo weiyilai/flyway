@@ -37,6 +37,23 @@ By downloading Flyway Community Gradle Plugin you confirm that you have read and
     </tr>
 </table>
 
+
+To use Teams & Enterprise features, you will need to add the following dependency to your `build.gradle`:
+
+```groovy
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://download.red-gate.com/maven/release"
+        }
+    }
+    dependencies {
+        classpath "com.redgate.flyway:flyway-redgate-licensing:{{ site.flywayVersion }}"
+    }
+}
+```
+
 For older versions, see [Accessing Older Versions of Flyway Engine](https://documentation.red-gate.com/flyway/release-notes-and-older-versions/accessing-older-versions-of-flyway-engine)
 
 ### Open Source Edition

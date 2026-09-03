@@ -64,6 +64,7 @@ import org.flywaydb.core.internal.configuration.models.FlywayEnvironmentModel;
 import org.flywaydb.core.internal.configuration.models.FlywayModel;
 import org.flywaydb.core.internal.database.DatabaseTypeRegister;
 import org.flywaydb.core.internal.plugin.PluginRegister;
+import org.flywaydb.core.internal.util.AsciiTable;
 import org.flywaydb.core.internal.util.ClassUtils;
 import org.flywaydb.core.internal.util.FileUtils;
 import org.flywaydb.core.internal.util.FlywayDbWebsiteLinks;
@@ -722,23 +723,16 @@ public class ConfigUtils {
             && ClassUtils.getGettableFieldValues(model.getFlyway(), "").isEmpty();
     }
 
-    public static void dumpEnvironmentModel(final EnvironmentModel model,
-        final String envKey,
-        final String configMessage) {
-        if (!LogFactory.isDebugEnabled()) {
+    public static void dumpConfigurationModel(final ConfigurationModel config, final String configMessage, final Map<String, Source> sources) {
+        if (!isConfigurationMapLoggingEnabled()) {
             return;
         }
-        dumpConfigurationMap(getEnvironmentMap(model, envKey), configMessage);
+
+        LOG.debug(configMessage);
+        LOG.debug("\n" + getConfigurationAsciiTable(getConfigurationMapFromModel(config), sources));
     }
 
-    public static void dumpConfigurationModel(final ConfigurationModel config, final String configMessage) {
-        if (!LogFactory.isDebugEnabled()) {
-            return;
-        }
-        dumpConfigurationMap(getConfigurationMapFromModel(config), configMessage);
-    }
-
-    private static Map<String, String> getConfigurationMapFromModel(final ConfigurationModel config) {
+    public static Map<String, String> getConfigurationMapFromModel(final ConfigurationModel config) {
         final Map<String, String> configMap = new TreeMap<>(ClassUtils.getGettableFieldValues(config.getFlyway(),
             "flyway."));
         config.getEnvironments().forEach((name, env) -> configMap.putAll(getEnvironmentMap(env, name)));
@@ -774,18 +768,10 @@ public class ConfigUtils {
     static String getConfigMapDump(final Map<String, String> config) {
         final StringBuilder dump = new StringBuilder();
         for (final Map.Entry<String, String> entry : new TreeMap<>(config).entrySet()) {
-            final String key = entry.getKey();
-            String value = entry.getValue();
-
-            value = StringUtils.redactValueIfSensitive(key, value);
-
-            if (key.toLowerCase(Locale.ROOT).endsWith("url")) {
-                value = DatabaseTypeRegister.redactJdbcUrl(value);
-            } else if (key.toLowerCase(Locale.ROOT).endsWith("jdbcproperties")) {
-                value = StringUtils.redactedValueStringOfAMap(value);
-            }
-
-            dump.append(key).append(" -> ").append(value).append("\n");
+            dump.append(entry.getKey())
+                .append(" -> ")
+                .append(redactValue(entry.getKey(), entry.getValue()))
+                .append("\n");
         }
         return dump.toString();
     }
@@ -1052,5 +1038,34 @@ public class ConfigUtils {
 
     public static boolean isOSS() {
         return !isRedgate();
+    }
+
+    public static boolean isConfigurationMapLoggingEnabled() {
+        return LogFactory.isDebugEnabled() && "true".equalsIgnoreCase(System.getenv("FLYWAY_LOG_DEBUG_CONFIGURATION_MAP"));
+    }
+
+    private static String getConfigurationAsciiTable(final Map<String, String> config, final Map<String, Source> sources) {
+        final List<String> columns = List.of("Setting", "Value", "Source");
+        final List<List<String>> rows = new TreeMap<>(config).entrySet()
+            .stream()
+            .map(entry -> List.of(entry.getKey(),
+                redactValue(entry.getKey(), entry.getValue()),
+                sources.getOrDefault(entry.getKey(), Source.DEFAULT).getLabel()))
+            .toList();
+
+        return new AsciiTable(columns, rows, true, "", "No configuration").render();
+    }
+
+    private static String redactValue(final String key, final String value) {
+        String redacted = StringUtils.redactValueIfSensitive(key, value);
+
+        final String lowerKey = key.toLowerCase(Locale.ROOT);
+        if (lowerKey.endsWith("url")) {
+            redacted = DatabaseTypeRegister.redactJdbcUrl(redacted);
+        } else if (lowerKey.endsWith("jdbcproperties")) {
+            redacted = StringUtils.redactedValueStringOfAMap(redacted);
+        }
+
+        return redacted;
     }
 }

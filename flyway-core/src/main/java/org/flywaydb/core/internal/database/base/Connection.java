@@ -19,14 +19,14 @@
  */
 package org.flywaydb.core.internal.database.base;
 
+import java.io.Closeable;
+import java.sql.SQLException;
+import java.util.Objects;
+import java.util.concurrent.Callable;
 import org.flywaydb.core.internal.exception.FlywaySqlException;
 import org.flywaydb.core.internal.jdbc.ExecutionTemplateFactory;
 import org.flywaydb.core.internal.jdbc.JdbcTemplate;
 import org.flywaydb.core.internal.jdbc.JdbcUtils;
-
-import java.io.Closeable;
-import java.sql.SQLException;
-import java.util.concurrent.Callable;
 
 public abstract class Connection<D extends Database> implements Closeable {
     protected final D database;
@@ -80,10 +80,9 @@ public abstract class Connection<D extends Database> implements Closeable {
 
     public void changeCurrentSchemaTo(final Schema schema) {
         try {
-            if (!schema.exists()) {
-                return;
+            if (schema.exists() && !Objects.equals(schema.getName(), getCurrentSchemaNameOrSearchPath())) {
+                doChangeCurrentSchemaOrSearchPathTo(schema.getName());
             }
-            doChangeCurrentSchemaOrSearchPathTo(schema.getName());
         } catch (SQLException e) {
             throw new FlywaySqlException("Error setting current schema to " + schema, e);
         }
@@ -121,7 +120,9 @@ public abstract class Connection<D extends Database> implements Closeable {
     private void restoreOriginalSchema() {
         ExecutionTemplateFactory.createExecutionTemplate(jdbcConnection, database).execute((Callable<Void>) () -> {
             try {
-                doChangeCurrentSchemaOrSearchPathTo(originalSchemaNameOrSearchPath);
+                if (!Objects.equals(originalSchemaNameOrSearchPath, getCurrentSchemaNameOrSearchPath())) {
+                    doChangeCurrentSchemaOrSearchPathTo(originalSchemaNameOrSearchPath);
+                }
             } catch (SQLException e) {
                 throw new FlywaySqlException("Unable to restore original schema", e);
             }

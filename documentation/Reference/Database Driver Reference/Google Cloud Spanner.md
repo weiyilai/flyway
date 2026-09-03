@@ -74,3 +74,6 @@ Set this URL in the [`url`](<Configuration/Environments Namespace/Environment ur
 
 Set the [`user`](<Configuration/Environments Namespace/Environment user Setting>) and [`password`](<Configuration/Environments Namespace/Environment password Setting>) properties to empty in your Flyway configuration (conf or TOML) since we're authenticating using the JDBC URL
 
+## Limitations
+
+- Flyway only supports the GoogleSQL Dialect.

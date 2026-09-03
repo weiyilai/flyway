@@ -21,7 +21,6 @@ package org.flywaydb.commandline.configuration;
 
 import static org.flywaydb.core.internal.configuration.ConfigUtils.DEFAULT_CLI_JARS_LOCATION;
 import static org.flywaydb.core.internal.configuration.ConfigUtils.DEFAULT_CLI_SQL_LOCATION;
-import static org.flywaydb.core.internal.configuration.ConfigUtils.dumpEnvironmentModel;
 import static org.flywaydb.core.internal.configuration.ConfigUtils.isOSS;
 import static org.flywaydb.core.internal.configuration.ConfigUtils.makeRelativeJarDirsBasedOnWorkingDirectory;
 import static org.flywaydb.core.internal.configuration.ConfigUtils.makeRelativeJarDirsInEnvironmentsBasedOnWorkingDirectory;
@@ -64,6 +63,7 @@ import org.flywaydb.core.extensibility.ConfigurationExtension;
 import org.flywaydb.core.ProgressLoggerEmpty;
 import org.flywaydb.core.internal.configuration.ConfigUtils;
 import org.flywaydb.core.utilities.configuration.TomlUtils;
+import org.flywaydb.core.internal.configuration.Source;
 import org.flywaydb.core.internal.configuration.models.ConfigurationModel;
 import org.flywaydb.core.internal.configuration.models.EnvironmentModel;
 import org.flywaydb.core.internal.configuration.models.FlywayEnvironmentModel;
@@ -95,9 +95,15 @@ public class ModernConfigurationManager implements ConfigurationManager {
         tomlFiles.addAll(commandLineArguments.getConfigFilePathsFromEnv(true));
         tomlFiles.addAll(commandLineArguments.getConfigFiles().stream().map(File::new).toList());
 
-        ConfigurationModel config = TomlUtils.loadConfigurationFiles(tomlFiles.stream()
+        ConfigurationModel config = ConfigurationModel.defaults();
+
+        final Map<String, Source> sources = new HashMap<>();
+
+        final Map<String, String> beforeToml = snapshot(config);
+        config = config.merge(TomlUtils.loadConfigurationFiles(tomlFiles.stream()
             .filter(File::exists)
-            .collect(Collectors.toList()));
+            .collect(Collectors.toList())));
+        diffAndTag(sources, beforeToml, config, Source.TOML);
 
         final ConfigurationModel commandLineArgumentsModel = TomlUtils.loadConfigurationFromCommandlineArgs(
             commandLineArguments.getConfiguration(true));
@@ -107,42 +113,58 @@ public class ModernConfigurationManager implements ConfigurationManager {
         if (ConfigUtils.detectNullConfigModel(environmentVariablesModel)) {
             LOG.debug("Skipping empty environment variables");
         } else {
-            ConfigUtils.dumpConfigurationModel(environmentVariablesModel,
-                "Loading configuration from environment variables:");
+            final Map<String, String> beforeEnvironmentVariables = snapshot(config);
             config = config.merge(environmentVariablesModel);
+            diffAndTag(sources, beforeEnvironmentVariables, config, Source.ENVIRONMENT_VARIABLE);
         }
 
         if (ConfigUtils.detectNullConfigModel(commandLineArgumentsModel)) {
             LOG.debug("No flyway namespace variables found in command line");
         } else {
-            ConfigUtils.dumpConfigurationModel(commandLineArgumentsModel,
-                "Loading configuration from command line arguments:");
+            final Map<String, String> beforeCommandLineArguments = snapshot(config);
             config = config.merge(commandLineArgumentsModel);
+            diffAndTag(sources, beforeCommandLineArguments, config, Source.COMMAND_LINE);
         }
 
         if (commandLineArgumentsModel.getEnvironments().containsKey(ClassicConfiguration.TEMP_ENVIRONMENT_NAME)
             || environmentVariablesModel.getEnvironments().containsKey(ClassicConfiguration.TEMP_ENVIRONMENT_NAME)) {
-            final EnvironmentModel defaultEnv = config.getEnvironments().get(config.getFlyway().getEnvironment());
-            EnvironmentModel mergedModel = null;
+            final String currentEnvironment = config.getFlyway().getEnvironment();
+            boolean mergedTempEnvironment = false;
 
-            if (environmentVariablesModel.getEnvironments().containsKey(ClassicConfiguration.TEMP_ENVIRONMENT_NAME)) {
-                final EnvironmentModel environmentVariablesEnv = environmentVariablesModel.getEnvironments()
-                    .get(ClassicConfiguration.TEMP_ENVIRONMENT_NAME);
-                mergedModel = defaultEnv == null ? environmentVariablesEnv : defaultEnv.merge(environmentVariablesEnv);
+            final EnvironmentModel environmentVariablesEnv = environmentVariablesModel.getEnvironments()
+                .get(ClassicConfiguration.TEMP_ENVIRONMENT_NAME);
+            if (environmentVariablesEnv != null) {
+                final EnvironmentModel existingEnv = config.getEnvironments().get(currentEnvironment);
+                final EnvironmentModel merged = existingEnv == null
+                    ? environmentVariablesEnv
+                    : existingEnv.merge(environmentVariablesEnv);
+
+                final Map<String, String> beforeTempEnvironmentVariable = snapshot(config);
+                config.getEnvironments().put(currentEnvironment, merged);
+                diffAndTag(sources, beforeTempEnvironmentVariable, config, Source.ENVIRONMENT_VARIABLE);
+                mergedTempEnvironment = true;
             }
 
-            if (commandLineArgumentsModel.getEnvironments().containsKey(ClassicConfiguration.TEMP_ENVIRONMENT_NAME)) {
-                final EnvironmentModel commandLineArgumentsEnv = commandLineArgumentsModel.getEnvironments()
-                    .get(ClassicConfiguration.TEMP_ENVIRONMENT_NAME);
-                mergedModel = mergedModel == null ? defaultEnv == null
+            final EnvironmentModel commandLineArgumentsEnv = commandLineArgumentsModel.getEnvironments()
+                .get(ClassicConfiguration.TEMP_ENVIRONMENT_NAME);
+            if (commandLineArgumentsEnv != null) {
+                final EnvironmentModel existingEnv = config.getEnvironments().get(currentEnvironment);
+                final EnvironmentModel merged = existingEnv == null
                     ? commandLineArgumentsEnv
-                    : defaultEnv.merge(commandLineArgumentsEnv) : mergedModel.merge(commandLineArgumentsEnv);
+                    : existingEnv.merge(commandLineArgumentsEnv);
+
+                final Map<String, String> beforeTempCommandLineArguments = snapshot(config);
+                config.getEnvironments().put(currentEnvironment, merged);
+                diffAndTag(sources, beforeTempCommandLineArguments, config, Source.COMMAND_LINE);
+                mergedTempEnvironment = true;
             }
 
-            if (mergedModel != null) {
-                LOG.debug("Merged " + ClassicConfiguration.TEMP_ENVIRONMENT_NAME + " into the " + config.getFlyway()
-                    .getEnvironment() + " environment");
-                config.getEnvironments().put(config.getFlyway().getEnvironment(), mergedModel);
+            if (mergedTempEnvironment) {
+                LOG.debug("Merged "
+                    + ClassicConfiguration.TEMP_ENVIRONMENT_NAME
+                    + " into the "
+                    + currentEnvironment
+                    + " environment");
             }
 
             config.getEnvironments().remove(ClassicConfiguration.TEMP_ENVIRONMENT_NAME);
@@ -178,12 +200,14 @@ public class ModernConfigurationManager implements ConfigurationManager {
                         flywayEnvironmentModelArguments).getFlyway()));
 
                 EnvironmentModel env = objectMapper.convertValue(envValueObject, EnvironmentModel.class);
-                dumpEnvironmentModel(env, envKey, "Loading environment configuration from command line:");
 
                 if (config.getEnvironments().containsKey(envKey)) {
                     env = config.getEnvironments().get(envKey).merge(env);
                 }
+
+                final Map<String, String> beforeNamedEnvironmentCommandLineArgs = snapshot(config);
                 config.getEnvironments().put(envKey, env);
+                diffAndTag(sources, beforeNamedEnvironmentCommandLineArgs, config, Source.COMMAND_LINE);
             } catch (final IllegalArgumentException exc) {
                 final String fieldName = exc.getMessage().split("\"")[1];
                 throw new FlywayException(String.format("Failed to configure parameter: '%s' in your '%s' environment",
@@ -194,7 +218,7 @@ public class ModernConfigurationManager implements ConfigurationManager {
 
         warnForUnknownEnvParameters(config.getEnvironments());
 
-        ConfigUtils.dumpConfigurationModel(config, "Using configuration:");
+        ConfigUtils.dumpConfigurationModel(config, "Using configuration:", sources);
         final ClassicConfiguration cfg = new ClassicConfiguration(config);
 
         cfg.setWorkingDirectory(workingDirectory);
@@ -222,7 +246,12 @@ public class ModernConfigurationManager implements ConfigurationManager {
      * @return the loaded configuration
      */
     public Configuration getMcpActionConfiguration(final List<File> tomlFiles, final String workingDirectory) {
-        final ConfigurationModel config = TomlUtils.loadConfigurationFiles(tomlFiles);
+        final Map<String, Source> sources = new HashMap<>();
+
+        ConfigurationModel config = ConfigurationModel.defaults();
+        final Map<String, String> beforeToml = snapshot(config);
+        config = config.merge(TomlUtils.loadConfigurationFiles(tomlFiles));
+        diffAndTag(sources, beforeToml, config, Source.TOML);
 
         // Override properties which are not supported in MCP server tool configuration
         config.getFlyway().setOutputProgress(false);
@@ -239,13 +268,64 @@ public class ModernConfigurationManager implements ConfigurationManager {
         makeRelativeLocationsBasedOnWorkingDirectory(workingDirectory, config.getFlyway().getCallbackLocations());
         makeRelativeLocationsInEnvironmentsBasedOnWorkingDirectory(workingDirectory, config.getEnvironments());
 
-        ConfigUtils.dumpConfigurationModel(config, "Using configuration:");
+        ConfigUtils.dumpConfigurationModel(config, "Using configuration:", sources);
         final ClassicConfiguration cfg = new ClassicConfiguration(config);
         cfg.setWorkingDirectory(workingDirectory);
         configurePlugins(config, cfg, false);
         setDefaultSqlLocation(workingDirectory, cfg);
 
         return cfg;
+    }
+
+    // Fields that EnvironmentModel eagerly initialises (schemas, jdbcProperties, flyway) render the same,
+    // non-null value whether or not a stage actually configured them. Keyed by field name, not full dotted
+    // key, so it applies regardless of which environment is being introduced.
+    private static final Map<String, String> UNSET_ENVIRONMENT_FIELD_VALUES = unsetEnvironmentFieldValues();
+
+    private static Map<String, String> unsetEnvironmentFieldValues() {
+        final String envKey = "blank";
+        final String prefix = "environments." + envKey + ".";
+        return ConfigUtils.getEnvironmentMap(new EnvironmentModel(), envKey)
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(entry -> entry.getKey().substring(prefix.length()), Map.Entry::getValue));
+    }
+
+    // Cheap snapshot for diffAndTag: skips the flattening work entirely when the configuration table won't be
+    // logged, so source tracking costs nothing on the common path.
+    private static Map<String, String> snapshot(final ConfigurationModel config) {
+        return ConfigUtils.isConfigurationMapLoggingEnabled() ? ConfigUtils.getConfigurationMapFromModel(config) : Map.of();
+    }
+
+    static void diffAndTag(final Map<String, Source> sources,
+        final Map<String, String> before,
+        final ConfigurationModel after,
+        final Source source) {
+        if (!ConfigUtils.isConfigurationMapLoggingEnabled()) {
+            return;
+        }
+
+        ConfigUtils.getConfigurationMapFromModel(after).forEach((key, value) -> {
+            if (value.equals(before.get(key))) {
+                return;
+            }
+
+            if (before.get(key) == null && isUnsetEnvironmentField(key, value)) {
+                return;
+            }
+            sources.put(key, source);
+        });
+    }
+
+    private static boolean isUnsetEnvironmentField(final String key, final String value) {
+        if (!key.startsWith("environments.")) {
+            return false;
+        }
+        final int fieldStart = key.indexOf('.', "environments.".length()) + 1;
+        if (fieldStart == 0) {
+            return false;
+        }
+        return value.equals(UNSET_ENVIRONMENT_FIELD_VALUES.get(key.substring(fieldStart)));
     }
 
     private static void handleResolverCommandLineArgs(final String environment,

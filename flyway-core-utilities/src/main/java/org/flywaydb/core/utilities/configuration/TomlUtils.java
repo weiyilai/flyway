@@ -175,9 +175,7 @@ public class TomlUtils {
     }
 
     public static ConfigurationModel loadConfigurationFiles(final List<File> files) {
-        final ConfigurationModel defaultConfig = ConfigurationModel.defaults();
-        ConfigUtils.dumpConfigurationModel(defaultConfig, "Default configuration:");
-        return files.stream().map(TomlUtils::loadConfigurationFile).reduce(defaultConfig, ConfigurationModel::merge);
+        return files.stream().map(TomlUtils::loadConfigurationFile).reduce(new ConfigurationModel(), ConfigurationModel::merge);
     }
 
     static ConfigurationModel loadConfigurationFile(final File configFile) {
@@ -189,7 +187,6 @@ public class TomlUtils {
                 .build()
                 .readerFor(ConfigurationModel.class)
                 .readValue(configText);
-            ConfigUtils.dumpConfigurationModel(tomlConfig, "Loading config file: " + configFile.getAbsolutePath());
             return tomlConfig;
         } catch (final MismatchedInputException exception) {
             final String path = exception.getPath()

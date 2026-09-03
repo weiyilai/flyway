@@ -34,3 +34,5 @@ org.flywaydb.core.internal.NullFlywayTelemetryManager
 org.flywaydb.core.internal.proprietaryStubs.ShouldExecuteEvaluatorStub
 org.flywaydb.core.internal.proprietaryStubs.ErrorOverrideInitializerStub
 org.flywaydb.core.internal.proprietaryStubs.ErrorOverridesSupportStub
+# Do not register non-stub ConfigurationExtension implementations in flyway-core
+# BaselineMigrationConfigurationExtension is the only exception

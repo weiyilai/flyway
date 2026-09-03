@@ -156,7 +156,7 @@ account:
 |-------------------------------|---------------------------------------|----------------------------------------------------------------------------------------------------------|
 | `load_project`                | `develop_migrations`, `develop_state` | Loads a Flyway project into a new workspace.                                                             |
 | `reload_project`              | `develop_migrations`, `develop_state` | Reloads an already-loaded project from disk, preserving existing artifacts.                              |
-| `create_before_pull_snapshot` | `develop_migrations`                  | Snapshots the schema model before pulling changes from version control, for use as a baseline diff.      |
+| `create_schema_model_checkpoint` | `develop_migrations`               | Captures a checkpoint of the schema model for use as a baseline in a three-sided development diff.       |
 | `create_diff_schema_model`    | `develop_migrations`, `develop_state` | Diffs the development database against the project's schema model.                                       |
 | `update_schema_model`         | `develop_migrations`, `develop_state` | Applies selected changes from a schema model diff to the schema model files.                             |
 | `create_diff_migrations`      | `develop_migrations`                  | Diffs the schema model against the current migration scripts (via the shadow environment).               |
@@ -185,16 +185,16 @@ over `load_project` when you've only edited the project's toml files.
 |---------------|----------|------------------------------------------|
 | `workspaceId` | Yes      | Workspace ID returned by `load_project`. |
 
-#### create_before_pull_snapshot
+#### create_schema_model_checkpoint
 
-Creates a snapshot of the current schema model before pulling changes from version control. The snapshot can be used as
-input to `create_diff_development` to categorize changes by origin (local vs. upstream).
+Captures a checkpoint of the current schema model. The checkpoint can be used as input to `create_diff_development` to
+categorize changes by origin (schema model vs. checkpoint) as a three-sided diff.
 
 | Parameter     | Required | Description                       |
 |---------------|----------|-----------------------------------|
 | `workspaceId` | Yes      | Workspace ID from `load_project`. |
 
-Returns a `beforeSnapshotId`, intended for future use as an input to `create_diff_development`.
+Returns a `checkpointId`, intended for use as an input to `create_diff_development`.
 
 #### create_diff_schema_model
 
